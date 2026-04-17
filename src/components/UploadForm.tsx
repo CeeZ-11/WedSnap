@@ -77,6 +77,18 @@ export function UploadForm() {
   </p>
 </div>
 
+{/* ✅ ADD IT HERE (below heading) */}
+<div className="max-w-md mx-auto mb-6 px-4">
+  <div className="text-center border border-light-sage/30 bg-light-sage/10 rounded-xl px-5 py-4">
+    <p className="text-sm text-deep-olive font-medium">
+      🚧 Wedding Snaps is currently in progress
+    </p>
+    <p className="text-xs text-deep-olive/70 mt-2">
+      This feature will be fully available one day before the wedding 💛
+    </p>
+  </div>
+</div>
+
       <AnimatePresence mode="wait">
         {uploadState === 'success' ?
         <motion.div
