@@ -64,16 +64,18 @@ export function UploadForm() {
   return (
     <div className="w-full max-w-lg mx-auto px-4 py-8 md:py-12">
       <div className="text-center mb-8">
-        <h1 className="font-serif text-4xl md:text-5xl text-dark mb-3">
-          Seamor & Lady Stephanie
-        </h1>
-        <p className="text-dark/70 font-medium tracking-wide text-sm uppercase">
-          October 12, 2026
-        </p>
-        <p className="mt-4 text-dark/80">
-          Share your favorite moments with us!
-        </p>
-      </div>
+  <h1 className="text-4xl md:text-5xl mb-4 font-semibold text-deep-olive font-[Playfair Display]">
+    Seamor & Lady Stephanie
+  </h1>
+
+  <p className="text-base md:text-lg text-deep-olive/70 font-sans">
+    December 27, 2026
+  </p>
+
+  <p className="mt-2 text-sm md:text-base text-deep-olive/80 font-sans">
+    Share your favorite moments with us!
+  </p>
+</div>
 
       <AnimatePresence mode="wait">
         {uploadState === 'success' ?

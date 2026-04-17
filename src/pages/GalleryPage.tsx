@@ -42,7 +42,9 @@ export function GalleryPage() {
       className="min-h-screen pt-20 pb-24 md:pt-28 md:pb-12 bg-ivory">
       
       <div className="text-center mb-8 px-4">
-        <h1 className="font-serif text-4xl text-dark mb-2">Gallery</h1>
+        <h1 className="text-4xl md:text-5xl mb-3 font-semibold text-deep-olive font-[Playfair Display]">
+    Wedding Snaps
+  </h1>
         <p className="text-dark/60">Memories from our special day</p>
       </div>
 
