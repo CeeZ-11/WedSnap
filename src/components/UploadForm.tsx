@@ -1,16 +1,23 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Camera,
-  Upload,
   CheckCircle2,
   X,
-  Image as ImageIcon,
 } from 'lucide-react';
 
-// ✅ Firebase
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { collection, addDoc } from "firebase/firestore";
+// Firebase
+import {
+  ref,
+  uploadBytesResumable,
+  getDownloadURL
+} from "firebase/storage";
+
+import {
+  collection,
+  addDoc
+} from "firebase/firestore";
+
 import { storage, db } from "../lib/firebase";
 
 export function UploadForm() {
@@ -21,6 +28,9 @@ export function UploadForm() {
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ----------------------------
+  // Drag & Drop
+  // ----------------------------
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -34,13 +44,13 @@ export function UploadForm() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    if (e.dataTransfer.files) {
       setFiles(Array.from(e.dataTransfer.files));
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
+    if (e.target.files) {
       setFiles(Array.from(e.target.files));
     }
   };
@@ -49,7 +59,9 @@ export function UploadForm() {
     setFiles(files.filter((_, i) => i !== index));
   };
 
-  // 🔥 REAL FIREBASE UPLOAD
+  // ----------------------------
+  // 🔥 FINAL UPLOAD LOGIC
+  // ----------------------------
   const handleUpload = async () => {
     if (files.length === 0) return;
 
@@ -57,39 +69,59 @@ export function UploadForm() {
     setProgress(0);
 
     try {
-      let completed = 0;
-
       for (const file of files) {
-        // ✅ limit file size (5MB)
+
+        // Limit size
         if (file.size > 5 * 1024 * 1024) {
           alert(`${file.name} is too large (max 5MB)`);
           continue;
         }
 
-        const fileRef = ref(storage, `wedding/${Date.now()}-${file.name}`);
+        const fileName = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
+        const fileRef = ref(storage, `wedding/${fileName}`);
 
-        await uploadBytes(fileRef, file);
+        const uploadTask = uploadBytesResumable(fileRef, file);
 
-        const url = await getDownloadURL(fileRef);
+        // 🔥 Upload with real progress
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on(
+            "state_changed",
+            (snapshot) => {
+              const percent =
+                (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
 
-        await addDoc(collection(db, "gallery"), {
-          url,
-          uploaderName: name || "Guest",
-          createdAt: Date.now(),
+              setProgress(Math.round(percent));
+            },
+            (error) => reject(error),
+            () => resolve()
+          );
         });
 
-        completed++;
-        setProgress(Math.round((completed / files.length) * 100));
+        // 🔥 Immediately mark complete
+        setProgress(100);
+
+        // 🔥 Firestore (non-blocking)
+        getDownloadURL(uploadTask.snapshot.ref).then((url) => {
+          addDoc(collection(db, "gallery"), {
+            url,
+            uploaderName: name || "Guest",
+            createdAt: Date.now(),
+          });
+        });
       }
 
+      // ✅ Success UI immediately
       setUploadState("success");
       setFiles([]);
       setName("");
 
-      setTimeout(() => setUploadState("idle"), 3000);
+      setTimeout(() => {
+        setUploadState("idle");
+        setProgress(0);
+      }, 2500);
 
     } catch (error) {
-      console.error(error);
+      console.error("UPLOAD ERROR:", error);
       alert("Upload failed");
       setUploadState("idle");
     }
@@ -134,31 +166,20 @@ export function UploadForm() {
             exit={{ opacity: 0, scale: 0.9 }}
             className="bg-champagne/30 rounded-2xl p-8 text-center border border-warm-beige"
           >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', delay: 0.2 }}
-              className="w-16 h-16 bg-gold/20 rounded-full flex items-center justify-center mx-auto mb-4 text-gold"
-            >
+            <div className="w-16 h-16 bg-gold/20 rounded-full flex items-center justify-center mx-auto mb-4 text-gold">
               <CheckCircle2 size={32} />
-            </motion.div>
+            </div>
 
             <h3 className="font-serif text-2xl text-dark mb-2">
-              Photos Uploaded!
+              Uploaded!
             </h3>
 
             <p className="text-dark/70">
-              Thank you for sharing these memories with us.
+              Thank you for sharing 💛
             </p>
           </motion.div>
         ) : (
-          <motion.div
-            key="form"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="space-y-6"
-          >
+          <motion.div className="space-y-6">
 
             {/* Drop Zone */}
             <div
@@ -166,11 +187,11 @@ export function UploadForm() {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`relative overflow-hidden rounded-2xl border-2 border-dashed transition-all cursor-pointer ${
+              className={`rounded-2xl border-2 border-dashed cursor-pointer p-10 text-center ${
                 isDragging
-                  ? 'border-gold bg-gold/5 scale-[1.02]'
+                  ? 'border-gold bg-gold/5'
                   : 'border-warm-beige bg-champagne/20 hover:bg-champagne/40'
-              } p-10 text-center flex flex-col items-center justify-center min-h-[240px]`}
+              }`}
             >
               <input
                 type="file"
@@ -181,99 +202,50 @@ export function UploadForm() {
                 accept="image/*"
               />
 
-              <div className="w-16 h-16 rounded-full bg-white shadow-sm flex items-center justify-center mb-4 text-gold">
-                <Camera size={28} strokeWidth={1.5} />
-              </div>
+              <Camera className="mx-auto mb-4 text-gold" size={28} />
 
-              <h3 className="font-medium text-dark text-lg mb-1">
-                Tap to select photos
-              </h3>
-
-              <p className="text-dark/50 text-sm">
-                or drag and drop them here
-              </p>
+              <p className="text-dark font-medium">Tap to select photos</p>
+              <p className="text-dark/50 text-sm">or drag and drop</p>
             </div>
 
-            {/* Files Preview */}
+            {/* Files */}
             {files.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-dark/70 px-1">
-                  Selected ({files.length})
-                </h4>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {files.map((file, index) => (
-                    <div
-                      key={index}
-                      className="relative group bg-white rounded-xl p-2 border border-warm-beige shadow-sm flex items-center space-x-2"
+              <div className="grid grid-cols-2 gap-3">
+                {files.map((file, i) => (
+                  <div key={i} className="relative p-2 border rounded-lg text-sm">
+                    {file.name}
+                    <button
+                      onClick={() => removeFile(i)}
+                      className="absolute top-1 right-1"
                     >
-                      <div className="w-10 h-10 rounded bg-champagne flex items-center justify-center shrink-0 text-dark/40">
-                        <ImageIcon size={20} />
-                      </div>
-
-                      <span className="text-xs text-dark truncate flex-1">
-                        {file.name}
-                      </span>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFile(index);
-                        }}
-                        className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-warm-beige rounded-full flex items-center justify-center text-dark/50 hover:text-dark shadow-sm"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
             {/* Name */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-dark/70 px-1">
-                Your Name (Optional)
-              </label>
-
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Aunt Sarah"
-                className="w-full px-4 py-3 rounded-xl border border-warm-beige bg-white focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold"
-              />
-            </div>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              className="w-full p-3 border rounded-xl"
+            />
 
             {/* Upload Button */}
             <button
               onClick={handleUpload}
-              disabled={files.length === 0 || uploadState === 'uploading'}
-              className={`w-full py-4 rounded-xl font-medium text-white transition-all relative overflow-hidden ${
+              disabled={files.length === 0 || uploadState === "uploading"}
+              className={`w-full py-3 rounded-xl text-white ${
                 files.length === 0
-                  ? 'bg-warm-beige cursor-not-allowed'
-                  : 'bg-dark hover:bg-dark/90 active:scale-[0.98] shadow-md'
+                  ? "bg-warm-beige cursor-not-allowed"
+                  : "bg-dark hover:bg-dark/90"
               }`}
             >
-              {uploadState === 'uploading' ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <span className="relative z-10">
-                    Uploading... {progress}%
-                  </span>
-
-                  <div
-                    className="absolute left-0 top-0 bottom-0 bg-gold/80 transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center space-x-2">
-                  <Upload size={18} />
-                  <span>
-                    Upload {files.length > 0 ? `${files.length} files` : ''}
-                  </span>
-                </div>
-              )}
+              {uploadState === "uploading"
+                ? `Uploading... ${progress}%`
+                : "Upload"}
             </button>
 
           </motion.div>
