@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { UploadForm } from '../components/UploadForm';
 export function UploadPage() {

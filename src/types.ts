@@ -1,8 +1,16 @@
 export type MediaItem = {
   id: string;
-  type: 'photo' | 'video';
+
+  // optional now (Firebase doesn’t provide these yet)
+  type?: 'photo' | 'video';
+
   url: string;
-  thumbnailUrl: string;
+  thumbnailUrl?: string;
+
   uploaderName: string;
-  timestamp: Date;
+
+  timestamp?: Date;
+
+  // ✅ ADD THIS (from Firebase)
+  createdAt?: number;
 };
