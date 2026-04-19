@@ -26,7 +26,6 @@ export function UploadForm() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'success'>('idle');
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ----------------------------
@@ -45,31 +44,14 @@ export function UploadForm() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-
     if (e.dataTransfer.files) {
-      const dropped = Array.from(e.dataTransfer.files);
-
-      if (dropped.length > 10) {
-        setError("⚠️ Maximum 10 files only.");
-        return;
-      }
-
-      setError('');
-      setFiles(dropped);
+      setFiles(Array.from(e.dataTransfer.files));
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const selected = Array.from(e.target.files);
-
-      if (selected.length > 10) {
-        setError("⚠️ Maximum 10 files only.");
-        return;
-      }
-
-      setError('');
-      setFiles(selected);
+      setFiles(Array.from(e.target.files));
     }
   };
 
@@ -78,71 +60,73 @@ export function UploadForm() {
   };
 
   // ----------------------------
-  // 🔥 UPLOAD
+  // 🔥 FINAL UPLOAD LOGIC
   // ----------------------------
   const handleUpload = async () => {
-    if (files.length === 0) return;
+  if (files.length === 0) return;
 
-    setUploadState("uploading");
-    setProgress(0);
-    setError('');
+  setUploadState("uploading");
+  setProgress(0);
 
-    try {
-      for (const file of files) {
+  try {
+    for (const file of files) {
 
-        // ❌ File size limit (5MB)
-        if (file.size > 5 * 1024 * 1024) {
-          setError(`⚠️ ${file.name} exceeds 5MB limit`);
-          setUploadState("idle");
-          return;
-        }
-
-        const fileName = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
-        const fileRef = ref(storage, `wedding/${fileName}`);
-
-        const uploadTask = uploadBytesResumable(fileRef, file);
-
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on(
-            "state_changed",
-            (snapshot) => {
-              const percent =
-                (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-
-              setProgress(Math.round(percent));
-            },
-            (error) => reject(error),
-            () => resolve()
-          );
-        });
-
-        setProgress(100);
-
-        const url = await getDownloadURL(uploadTask.snapshot.ref);
-
-        await addDoc(collection(db, "gallery"), {
-          url,
-          uploaderName: name || "Guest",
-          createdAt: Date.now(),
-        });
+      // Limit size
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`${file.name} is too large (max 5MB)`);
+        continue;
       }
 
-      // ✅ Success
-      setUploadState("success");
-      setFiles([]);
-      setName("");
+      const fileName = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
+      const fileRef = ref(storage, `wedding/${fileName}`);
 
-      setTimeout(() => {
-        setUploadState("idle");
-        setProgress(0);
-      }, 2500);
+      const uploadTask = uploadBytesResumable(fileRef, file);
 
-    } catch (error) {
-      console.error("UPLOAD ERROR:", error);
-      setError("Upload failed. Please try again.");
-      setUploadState("idle");
+      // Upload with progress
+      await new Promise<void>((resolve, reject) => {
+        uploadTask.on(
+          "state_changed",
+          (snapshot) => {
+            const percent =
+              (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+
+            setProgress(Math.round(percent));
+          },
+          (error) => reject(error),
+          () => resolve()
+        );
+      });
+
+      setProgress(100);
+
+      // ✅ FIX: await Firestore save
+      const url = await getDownloadURL(uploadTask.snapshot.ref);
+
+      await addDoc(collection(db, "gallery"), {
+        url,
+        uploaderName: name || "Guest",
+        createdAt: Date.now(),
+      });
+
+      console.log("✅ Saved to Firestore:", url);
     }
-  };
+
+    // Success UI
+    setUploadState("success");
+    setFiles([]);
+    setName("");
+
+    setTimeout(() => {
+      setUploadState("idle");
+      setProgress(0);
+    }, 2500);
+
+  } catch (error) {
+    console.error("UPLOAD ERROR:", error);
+    alert("Upload failed");
+    setUploadState("idle");
+  }
+};
 
   return (
     <div className="w-full max-w-lg mx-auto px-4 py-8 md:py-12">
@@ -173,13 +157,6 @@ export function UploadForm() {
           </p>
         </div>
       </div>
-
-      {/* ❌ Error */}
-      {error && (
-        <p className="text-sm text-red-500 text-center mb-4">
-          {error}
-        </p>
-      )}
 
       <AnimatePresence mode="wait">
         {uploadState === 'success' ? (
@@ -257,7 +234,7 @@ export function UploadForm() {
               className="w-full p-3 border rounded-xl"
             />
 
-            {/* Upload */}
+            {/* Upload Button */}
             <button
               onClick={handleUpload}
               disabled={files.length === 0 || uploadState === "uploading"}

@@ -4,7 +4,7 @@ import { GalleryGrid } from '../components/GalleryGrid';
 import { ImageModal } from '../components/ImageModal';
 import { MediaItem } from '../types';
 
-// ✅ Firebase (UPDATED)
+// Firebase
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
@@ -20,18 +20,23 @@ export function GalleryPage() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        url: doc.data().url,
-        uploaderName: doc.data().uploaderName,
-        createdAt: doc.data().createdAt,
-        type: "photo", // default for now
-      }));
+      const data: MediaItem[] = snapshot.docs.map((doc) => {
+        const d = doc.data();
 
-      setItems(data as MediaItem[]);
+        return {
+          id: doc.id,
+          url: d.url,
+          thumbnailUrl: d.url, // ✅ important for grid
+          uploaderName: d.uploaderName || "Guest",
+          type: "photo",
+          timestamp: new Date(d.createdAt || Date.now()), // ✅ fix for modal
+        };
+      });
+
+      setItems(data);
     });
 
-    return () => unsubscribe(); // cleanup
+    return () => unsubscribe();
   }, []);
 
   // ✅ Next
