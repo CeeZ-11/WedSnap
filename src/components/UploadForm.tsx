@@ -23,10 +23,18 @@ import { storage, db } from "../lib/firebase";
 export function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [name, setName] = useState('');
+
+  // ✅ NEW
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
   const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'success'>('idle');
   const [progress, setProgress] = useState(0);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const UPLOAD_PASSWORD = "SLwedding2026";
 
   // ----------------------------
   // Drag & Drop
@@ -60,73 +68,83 @@ export function UploadForm() {
   };
 
   // ----------------------------
-  // 🔥 FINAL UPLOAD LOGIC
+  // 🔥 UPLOAD LOGIC
   // ----------------------------
   const handleUpload = async () => {
-  if (files.length === 0) return;
 
-  setUploadState("uploading");
-  setProgress(0);
-
-  try {
-    for (const file of files) {
-
-      // Limit size
-      if (file.size > 5 * 1024 * 1024) {
-        alert(`${file.name} is too large (max 5MB)`);
-        continue;
-      }
-
-      const fileName = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
-      const fileRef = ref(storage, `wedding/${fileName}`);
-
-      const uploadTask = uploadBytesResumable(fileRef, file);
-
-      // Upload with progress
-      await new Promise<void>((resolve, reject) => {
-        uploadTask.on(
-          "state_changed",
-          (snapshot) => {
-            const percent =
-              (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-
-            setProgress(Math.round(percent));
-          },
-          (error) => reject(error),
-          () => resolve()
-        );
-      });
-
-      setProgress(100);
-
-      // ✅ FIX: await Firestore save
-      const url = await getDownloadURL(uploadTask.snapshot.ref);
-
-      await addDoc(collection(db, "gallery"), {
-        url,
-        uploaderName: name || "Guest",
-        createdAt: Date.now(),
-      });
-
-      console.log("✅ Saved to Firestore:", url);
+    // 🔐 PASSWORD VALIDATION
+    if (!password.trim()) {
+      setError("Please enter access code");
+      return;
     }
 
-    // Success UI
-    setUploadState("success");
-    setFiles([]);
-    setName("");
+    if (password !== UPLOAD_PASSWORD) {
+      setError("Invalid access code");
+      return;
+    }
 
-    setTimeout(() => {
+    setError("");
+
+    if (files.length === 0) return;
+
+    setUploadState("uploading");
+    setProgress(0);
+
+    try {
+      for (const file of files) {
+
+        if (file.size > 5 * 1024 * 1024) {
+          alert(`${file.name} is too large (max 5MB)`);
+          continue;
+        }
+
+        const fileName = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
+        const fileRef = ref(storage, `wedding/${fileName}`);
+
+        const uploadTask = uploadBytesResumable(fileRef, file);
+
+        await new Promise<void>((resolve, reject) => {
+          uploadTask.on(
+            "state_changed",
+            (snapshot) => {
+              const percent =
+                (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+
+              setProgress(Math.round(percent));
+            },
+            (error) => reject(error),
+            () => resolve()
+          );
+        });
+
+        setProgress(100);
+
+        const url = await getDownloadURL(uploadTask.snapshot.ref);
+
+        await addDoc(collection(db, "gallery"), {
+          url,
+          uploaderName: name || "Guest",
+          createdAt: Date.now(),
+        });
+      }
+
+      // ✅ SUCCESS
+      setUploadState("success");
+      setFiles([]);
+      setName("");
+      setPassword("");
+
+      setTimeout(() => {
+        setUploadState("idle");
+        setProgress(0);
+      }, 2500);
+
+    } catch (error) {
+      console.error("UPLOAD ERROR:", error);
+      alert("Upload failed");
       setUploadState("idle");
-      setProgress(0);
-    }, 2500);
-
-  } catch (error) {
-    console.error("UPLOAD ERROR:", error);
-    alert("Upload failed");
-    setUploadState("idle");
-  }
-};
+    }
+  };
 
   return (
     <div className="w-full max-w-lg mx-auto px-4 py-8 md:py-12">
@@ -158,6 +176,11 @@ export function UploadForm() {
         </div>
       </div>
 
+      {/* ❌ ERROR */}
+      {error && (
+        <p className="text-sm text-red-500 text-center mb-3">{error}</p>
+      )}
+
       <AnimatePresence mode="wait">
         {uploadState === 'success' ? (
           <motion.div
@@ -181,6 +204,15 @@ export function UploadForm() {
           </motion.div>
         ) : (
           <motion.div className="space-y-6">
+
+            {/* 🔐 PASSWORD */}
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter access code"
+              className="w-full p-3 border rounded-xl"
+            />
 
             {/* Drop Zone */}
             <div
@@ -234,10 +266,14 @@ export function UploadForm() {
               className="w-full p-3 border rounded-xl"
             />
 
-            {/* Upload Button */}
+            {/* Upload */}
             <button
               onClick={handleUpload}
-              disabled={files.length === 0 || uploadState === "uploading"}
+              disabled={
+                files.length === 0 ||
+                uploadState === "uploading" ||
+                !password
+              }
               className={`w-full py-3 rounded-xl text-white ${
                 files.length === 0
                   ? "bg-warm-beige cursor-not-allowed"
