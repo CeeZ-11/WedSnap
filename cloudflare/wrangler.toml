@@ -3,8 +3,8 @@ main = "src/index.js"
 compatibility_date = "2026-11-12"
 
 [vars]
-# Uploads remain disabled until explicitly changed in the Cloudflare dashboard.
-UPLOADS_ENABLED = "false"
+# Uploads are open; the Worker still validates guest names and invite codes.
+UPLOADS_ENABLED = "true"
 FRONTEND_ORIGIN = "https://wed-snap-nine.vercel.app"
 
 [[r2_buckets]]

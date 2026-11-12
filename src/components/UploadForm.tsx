@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Camera, CheckCircle2, X } from 'lucide-react';
+import guestNames from '../data/guestNames.json';
 
 const MAX_FILE_SIZE_BYTES = 90 * 1024 * 1024;
 const ACCEPTED_FILE_TYPES = new Set([
@@ -7,22 +8,46 @@ const ACCEPTED_FILE_TYPES = new Set([
   'video/mp4', 'video/quicktime', 'video/webm',
 ]);
 const ACCEPTED_FILE_TYPES_ATTRIBUTE = [...ACCEPTED_FILE_TYPES].join(',');
+const sortedGuestNames = [...guestNames].sort((a, b) => a.localeCompare(b));
 
 export function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [name, setName] = useState('');
+  const [nameSuggestionsOpen, setNameSuggestionsOpen] = useState(false);
+  const [activeNameSuggestion, setActiveNameSuggestion] = useState(-1);
   const [inviteCode, setInviteCode] = useState('');
   const [message, setMessage] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploaded, setUploaded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadsEnabled = import.meta.env.VITE_UPLOADS_ENABLED === 'true';
+  // Upload availability is controlled by the Cloudflare Worker. Keep the
+  // upload form visible in the frontend when the Worker has been opened.
+  const uploadsEnabled = true;
   const apiUrl = import.meta.env.VITE_GALLERY_API_URL || '';
+  const nameQuery = name.trim().toLocaleLowerCase();
+  const nameSuggestions = nameQuery.length >= 2
+    ? sortedGuestNames.filter((guestName) => guestName.toLocaleLowerCase().includes(nameQuery)).slice(0, 8)
+    : [];
+
+  const selectGuestName = (guestName: string) => {
+    setName(guestName);
+    setNameSuggestionsOpen(false);
+    setActiveNameSuggestion(-1);
+    setMessage('');
+  };
 
   const uploadFiles = async () => {
     setMessage('');
     if (!name.trim() || !inviteCode.trim() || files.length === 0) {
       setMessage('Enter your name and invite code, then choose at least one file.');
+      return;
+    }
+    if (!guestNames.includes(name.trim())) {
+      setMessage('Choose your exact name from the guest suggestions.');
+      return;
+    }
+    if (!/^[A-Z0-9]{4}$/.test(inviteCode)) {
+      setMessage('Enter your four-character invite code.');
       return;
     }
     if (files.some((file) => !ACCEPTED_FILE_TYPES.has(file.type.toLowerCase()))) {
@@ -96,8 +121,90 @@ export function UploadForm() {
         </div>
       ) : uploadsEnabled ? (
         <div className="space-y-4">
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name on the guest list" className="w-full p-3 border border-warm-beige rounded-xl bg-white" />
-          <input type="password" value={inviteCode} onChange={(event) => setInviteCode(event.target.value)} placeholder="Your personal invite code" className="w-full p-3 border border-warm-beige rounded-xl bg-white" />
+          <div className="space-y-2">
+            <label htmlFor="upload-guest-name" className="block font-sans text-xs font-semibold uppercase tracking-[0.18em] text-deep-olive">Full Name</label>
+            <p className="font-sans text-sm italic text-deep-olive/70">Type your name and select it from the suggestions.</p>
+            <div className="relative">
+              <input
+                id="upload-guest-name"
+                type="text"
+                required
+                autoComplete="off"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={nameSuggestionsOpen && nameQuery.length >= 2}
+                aria-controls={nameSuggestionsOpen && nameQuery.length >= 2 ? 'upload-guest-name-suggestions' : undefined}
+                aria-activedescendant={activeNameSuggestion >= 0 ? `upload-guest-name-option-${activeNameSuggestion}` : undefined}
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setNameSuggestionsOpen(true);
+                  setActiveNameSuggestion(-1);
+                  setMessage('');
+                }}
+                onFocus={() => setNameSuggestionsOpen(true)}
+                onBlur={() => setNameSuggestionsOpen(false)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown' && nameSuggestions.length > 0) {
+                    event.preventDefault();
+                    setNameSuggestionsOpen(true);
+                    setActiveNameSuggestion((active) => Math.min(active + 1, nameSuggestions.length - 1));
+                  } else if (event.key === 'ArrowUp' && nameSuggestions.length > 0) {
+                    event.preventDefault();
+                    setActiveNameSuggestion((active) => Math.max(active <= 0 ? 0 : active - 1, 0));
+                  } else if (event.key === 'Enter' && nameSuggestionsOpen && nameSuggestions.length > 0) {
+                    event.preventDefault();
+                    selectGuestName(nameSuggestions[Math.max(activeNameSuggestion, 0)]);
+                  } else if (event.key === 'Escape') {
+                    setNameSuggestionsOpen(false);
+                  }
+                }}
+                placeholder="Start typing your name"
+                className="w-full border-x-0 border-b border-t-0 border-warm-beige bg-transparent px-0 py-3 text-left font-serif text-xl text-deep-olive placeholder:text-deep-olive/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-deep-olive focus-visible:ring-offset-2 transition-colors"
+              />
+              {nameSuggestionsOpen && nameQuery.length >= 2 && nameSuggestions.length > 0 && (
+                <ul id="upload-guest-name-suggestions" role="listbox" className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto border border-warm-beige bg-white py-1 shadow-md">
+                  {nameSuggestions.map((guestName, index) => (
+                    <li key={guestName} role="presentation">
+                      <button
+                        id={`upload-guest-name-option-${index}`}
+                        type="button"
+                        role="option"
+                        aria-selected={activeNameSuggestion === index}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectGuestName(guestName)}
+                        onMouseEnter={() => setActiveNameSuggestion(index)}
+                        className={`w-full px-3 py-2 text-left font-serif text-lg text-deep-olive hover:bg-light-sage/30 focus-visible:bg-light-sage/30 focus-visible:outline-none ${activeNameSuggestion === index ? 'bg-light-sage/30' : ''}`}
+                      >
+                        {guestName}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {nameSuggestionsOpen && nameQuery.length >= 2 && nameSuggestions.length === 0 && (
+                <p className="absolute z-20 mt-1 w-full border border-warm-beige bg-white px-3 py-3 font-sans text-sm text-deep-olive/70 shadow-md" role="status">No matching name found.</p>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="upload-invite-code" className="block font-sans text-xs font-semibold uppercase tracking-[0.18em] text-deep-olive">Invite Code</label>
+            <input
+              id="upload-invite-code"
+              type="text"
+              required
+              autoComplete="off"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={4}
+              value={inviteCode}
+              onChange={(event) => setInviteCode(event.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4))}
+              placeholder="Four letters or numbers"
+              className="w-full border-x-0 border-b border-t-0 border-warm-beige bg-transparent px-0 py-3 font-serif text-xl uppercase tracking-[0.22em] text-deep-olive placeholder:normal-case placeholder:tracking-normal placeholder:text-deep-olive/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-deep-olive focus-visible:ring-offset-2 transition-colors"
+            />
+            <p className="font-sans text-xs text-deep-olive/70">Enter the four-character code exactly as provided.</p>
+          </div>
           <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-2xl border-2 border-dashed border-warm-beige bg-champagne/20 p-10 text-center hover:bg-champagne/40">
             <Camera className="mx-auto mb-4 text-gold" size={28} />
             <span className="block text-dark font-medium">Choose photos or videos</span>

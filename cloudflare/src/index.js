@@ -15,6 +15,11 @@ function corsHeaders(request, env) {
   };
 }
 
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -59,7 +64,7 @@ export default {
       }
 
       const name = request.headers.get('x-guest-name')?.trim();
-      const inviteCode = request.headers.get('x-invite-code');
+      const inviteCode = request.headers.get('x-invite-code')?.trim().toUpperCase();
       const contentType = request.headers.get('content-type') || '';
       const contentLength = Number(request.headers.get('content-length') || 0);
       const fileName = request.headers.get('x-file-name') || 'upload';
@@ -79,12 +84,46 @@ export default {
         return json({ error: 'Each file must be smaller than 90 MB.' }, 413, cors);
       }
 
-      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(inviteCode));
-      const codeHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+      const now = Date.now();
+      const lockoutWindowMs = 15 * 60 * 1000;
+      const maxFailedAttempts = 10;
+      const sourceIp = request.headers.get('CF-Connecting-IP') || 'unknown-ip';
+      const attemptKey = await sha256Hex(`${sourceIp}\u0000${name}`);
+      const attempts = await env.DB.prepare(
+        'SELECT window_started_at, failed_attempts FROM upload_auth_attempts WHERE attempt_key = ?'
+      ).bind(attemptKey).first();
+      if (attempts && now - attempts.window_started_at < lockoutWindowMs && attempts.failed_attempts >= maxFailedAttempts) {
+        return json({ error: 'Too many incorrect attempts. Please wait 15 minutes and try again.' }, 429, cors);
+      }
+
+      const recordFailedAttempt = async () => env.DB.prepare(
+        `INSERT INTO upload_auth_attempts (attempt_key, window_started_at, failed_attempts)
+         VALUES (?, ?, 1)
+         ON CONFLICT(attempt_key) DO UPDATE SET
+           window_started_at = CASE
+             WHEN upload_auth_attempts.window_started_at <= ? THEN excluded.window_started_at
+             ELSE upload_auth_attempts.window_started_at
+           END,
+           failed_attempts = CASE
+             WHEN upload_auth_attempts.window_started_at <= ? THEN 1
+             ELSE upload_auth_attempts.failed_attempts + 1
+           END`
+      ).bind(attemptKey, now, now - lockoutWindowMs, now - lockoutWindowMs).run();
+
+      if (!/^[A-Z0-9]{4}$/.test(inviteCode)) {
+        await recordFailedAttempt();
+        return json({ error: 'Name or invite code was not recognized.' }, 403, cors);
+      }
+
+      const codeHash = await sha256Hex(inviteCode);
       const guest = await env.DB.prepare(
         'SELECT name FROM guests WHERE name = ? AND invite_code_sha256 = ?'
       ).bind(name, codeHash).first();
-      if (!guest) return json({ error: 'Name or invite code was not recognized.' }, 403, cors);
+      if (!guest) {
+        await recordFailedAttempt();
+        return json({ error: 'Name or invite code was not recognized.' }, 403, cors);
+      }
+      await env.DB.prepare('DELETE FROM upload_auth_attempts WHERE attempt_key = ?').bind(attemptKey).run();
 
       const id = crypto.randomUUID();
       const safeName = fileName.normalize('NFKC').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100);
