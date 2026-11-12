@@ -1,6 +1,6 @@
 name = "wedsnap-gallery-api"
 main = "src/index.js"
-compatibility_date = "2026-11-13"
+compatibility_date = "2026-11-12"
 
 [vars]
 # Uploads remain disabled until explicitly changed in the Cloudflare dashboard.
