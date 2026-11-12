@@ -6,9 +6,11 @@ const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(
 function corsHeaders(request, env) {
   const origin = request.headers.get('Origin');
   const allowed = env.FRONTEND_ORIGIN;
-  if (!origin || !allowed || allowed.startsWith('REPLACE-') || origin !== allowed) return {};
+  // Allow the configured production domain and the current gallery URL.
+  const allowedOrigins = new Set([allowed, 'https://wed-snap-d59i59rxq-ceez-11s-projects.vercel.app']);
+  if (!origin || !allowed || allowed.startsWith('REPLACE-') || !allowedOrigins.has(origin)) return {};
   return {
-    'access-control-allow-origin': allowed,
+    'access-control-allow-origin': origin,
     'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-allow-headers': 'content-type, x-guest-name, x-invite-code, x-file-name',
     'vary': 'Origin',
