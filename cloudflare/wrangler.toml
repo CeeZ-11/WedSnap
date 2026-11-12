@@ -1,0 +1,18 @@
+name = "wedsnap-gallery-api"
+main = "src/index.js"
+compatibility_date = "2026-11-13"
+
+[vars]
+# Uploads remain disabled until explicitly changed in the Cloudflare dashboard.
+UPLOADS_ENABLED = "false"
+FRONTEND_ORIGIN = "https://wed-snap-nine.vercel.app"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "wedsnap-gallery-media"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wedsnap-gallery"
+database_id = "6f8935bc-c87a-4cb1-99e7-b67083fadf38"
+migrations_dir = "migrations"
