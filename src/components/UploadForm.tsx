@@ -1,293 +1,122 @@
-import { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Camera,
-  CheckCircle2,
-  X,
-} from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Camera, CheckCircle2, X } from 'lucide-react';
 
-// Firebase
-import {
-  ref,
-  uploadBytesResumable,
-  getDownloadURL
-} from "firebase/storage";
-
-import {
-  collection,
-  addDoc
-} from "firebase/firestore";
-
-import { storage, db } from "../lib/firebase";
+const MAX_FILE_SIZE_BYTES = 90 * 1024 * 1024;
+const ACCEPTED_FILE_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic',
+  'video/mp4', 'video/quicktime', 'video/webm',
+]);
+const ACCEPTED_FILE_TYPES_ATTRIBUTE = [...ACCEPTED_FILE_TYPES].join(',');
 
 export function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [name, setName] = useState('');
-
-  // ✅ NEW
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'success'>('idle');
-  const [progress, setProgress] = useState(0);
-
+  const [inviteCode, setInviteCode] = useState('');
+  const [message, setMessage] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploaded, setUploaded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadsEnabled = import.meta.env.VITE_UPLOADS_ENABLED === 'true';
+  const apiUrl = import.meta.env.VITE_GALLERY_API_URL || '';
 
-  const UPLOAD_PASSWORD = "SLwedding2026";
-
-  // ----------------------------
-  // Drag & Drop
-  // ----------------------------
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files) {
-      setFiles(Array.from(e.dataTransfer.files));
+  const uploadFiles = async () => {
+    setMessage('');
+    if (!name.trim() || !inviteCode.trim() || files.length === 0) {
+      setMessage('Enter your name and invite code, then choose at least one file.');
+      return;
     }
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(Array.from(e.target.files));
+    if (files.some((file) => !ACCEPTED_FILE_TYPES.has(file.type.toLowerCase()))) {
+      setMessage('Choose a JPEG, PNG, WebP, GIF, HEIC, MP4, MOV, or WebM file.');
+      return;
     }
-  };
-
-  const removeFile = (index: number) => {
-    setFiles(files.filter((_, i) => i !== index));
-  };
-
-  // ----------------------------
-  // 🔥 UPLOAD LOGIC
-  // ----------------------------
-  const handleUpload = async () => {
-
-    // 🔐 PASSWORD VALIDATION
-    if (!password.trim()) {
-      setError("Please enter access code");
+    if (files.some((file) => file.size > MAX_FILE_SIZE_BYTES)) {
+      setMessage('Each photo or video must be 90 MB or smaller.');
       return;
     }
 
-    if (password !== UPLOAD_PASSWORD) {
-      setError("Invalid access code");
-      return;
-    }
-
-    setError("");
-
-    if (files.length === 0) return;
-
-    setUploadState("uploading");
-    setProgress(0);
-
+    setIsUploading(true);
     try {
       for (const file of files) {
-
-        if (file.size > 5 * 1024 * 1024) {
-          alert(`${file.name} is too large (max 5MB)`);
-          continue;
-        }
-
-        const fileName = `${Date.now()}-${file.name.replace(/\s/g, "_")}`;
-        const fileRef = ref(storage, `wedding/${fileName}`);
-
-        const uploadTask = uploadBytesResumable(fileRef, file);
-
-        await new Promise<void>((resolve, reject) => {
-          uploadTask.on(
-            "state_changed",
-            (snapshot) => {
-              const percent =
-                (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-
-              setProgress(Math.round(percent));
-            },
-            (error) => reject(error),
-            () => resolve()
-          );
+        const response = await fetch(`${apiUrl}/api/uploads`, {
+          method: 'POST',
+          headers: {
+            'content-type': file.type,
+            'x-guest-name': name.trim(),
+            'x-invite-code': inviteCode,
+            'x-file-name': encodeURIComponent(file.name),
+          },
+          body: file,
         });
-
-        setProgress(100);
-
-        const url = await getDownloadURL(uploadTask.snapshot.ref);
-
-        await addDoc(collection(db, "gallery"), {
-          url,
-          uploaderName: name || "Guest",
-          createdAt: Date.now(),
-        });
+        const result = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(result.error || 'Upload failed. Please try again.');
       }
-
-      // ✅ SUCCESS
-      setUploadState("success");
+      setUploaded(true);
       setFiles([]);
-      setName("");
-      setPassword("");
-
-      setTimeout(() => {
-        setUploadState("idle");
-        setProgress(0);
-      }, 2500);
-
+      setName('');
+      setInviteCode('');
     } catch (error) {
-      console.error("UPLOAD ERROR:", error);
-      alert("Upload failed");
-      setUploadState("idle");
+      setMessage(error instanceof Error ? error.message : 'Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   return (
     <div className="w-full max-w-lg mx-auto px-4 py-8 md:py-12">
-
-      {/* Header */}
       <div className="text-center mb-8">
         <h1 className="text-4xl md:text-5xl mb-4 font-semibold text-deep-olive font-[Playfair Display]">
-          Seamor & Lady Stephanie
+          Seamor &amp; Lady Stephanie
         </h1>
-
         <p className="text-base md:text-lg text-deep-olive/70 font-sans">
           December 27, 2026
         </p>
-
         <p className="mt-2 text-sm md:text-base text-deep-olive/80 font-sans">
           Share your favorite moments with us!
         </p>
       </div>
 
-      {/* Notice */}
       <div className="max-w-md mx-auto mb-6 px-4">
         <div className="text-center border border-light-sage/30 bg-light-sage/10 rounded-xl px-5 py-4">
           <p className="text-sm text-deep-olive font-medium">
-            🚧 Wedding Snaps is currently in progress
+            {uploadsEnabled ? 'Uploads are open' : 'Wedding gallery uploads are currently closed'}
           </p>
           <p className="text-xs text-deep-olive/70 mt-2">
-            This feature will be fully available one day before the wedding 💛
+            {uploadsEnabled
+              ? 'Share photos and videos from the celebration.'
+              : 'Uploads will open when the couple is ready. Please check back the day before the wedding.'}
           </p>
         </div>
       </div>
 
-      {/* ❌ ERROR */}
-      {error && (
-        <p className="text-sm text-red-500 text-center mb-3">{error}</p>
+      {uploaded ? (
+        <div className="rounded-2xl p-8 text-center border border-warm-beige bg-champagne/30">
+          <CheckCircle2 className="mx-auto mb-3 text-gold" size={34} />
+          <p className="font-serif text-2xl text-dark">Uploaded!</p>
+          <p className="text-dark/70 mt-2">Thank you for sharing your memories.</p>
+        </div>
+      ) : uploadsEnabled ? (
+        <div className="space-y-4">
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name on the guest list" className="w-full p-3 border border-warm-beige rounded-xl bg-white" />
+          <input type="password" value={inviteCode} onChange={(event) => setInviteCode(event.target.value)} placeholder="Your personal invite code" className="w-full p-3 border border-warm-beige rounded-xl bg-white" />
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-2xl border-2 border-dashed border-warm-beige bg-champagne/20 p-10 text-center hover:bg-champagne/40">
+            <Camera className="mx-auto mb-4 text-gold" size={28} />
+            <span className="block text-dark font-medium">Choose photos or videos</span>
+            <span className="block text-dark/50 text-sm mt-1">Photos and videos up to 90 MB each</span>
+          </button>
+          <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_FILE_TYPES_ATTRIBUTE} className="hidden" onChange={(event) => { setFiles(Array.from(event.target.files || [])); setMessage(''); }} />
+          {files.length > 0 && <ul className="space-y-2">{files.map((file, index) => <li key={`${file.name}-${index}`} className="flex items-center justify-between rounded-lg border border-warm-beige bg-white px-3 py-2 text-sm"><span className="truncate">{file.name}</span><button type="button" aria-label={`Remove ${file.name}`} onClick={() => setFiles(files.filter((_, i) => i !== index))} className="ml-2 text-dark/60"><X size={16} /></button></li>)}</ul>}
+          {message && <p role="alert" className="text-sm text-red-700">{message}</p>}
+          <button type="button" onClick={uploadFiles} disabled={isUploading || files.length === 0} className="w-full py-3 rounded-xl bg-dark text-white hover:bg-dark/90 disabled:cursor-not-allowed disabled:bg-warm-beige">
+            {isUploading ? 'Uploading…' : 'Upload to the wedding gallery'}
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-2xl border-2 border-dashed border-warm-beige bg-champagne/20 p-10 text-center opacity-70">
+          <Camera className="mx-auto mb-4 text-gold" size={28} />
+          <p className="text-dark font-medium">Photo and video uploads are not open yet</p>
+          <p className="text-dark/50 text-sm mt-2">No files can be uploaded while the gallery is closed.</p>
+        </div>
       )}
-
-      <AnimatePresence mode="wait">
-        {uploadState === 'success' ? (
-          <motion.div
-            key="success"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-champagne/30 rounded-2xl p-8 text-center border border-warm-beige"
-          >
-            <div className="w-16 h-16 bg-gold/20 rounded-full flex items-center justify-center mx-auto mb-4 text-gold">
-              <CheckCircle2 size={32} />
-            </div>
-
-            <h3 className="font-serif text-2xl text-dark mb-2">
-              Uploaded!
-            </h3>
-
-            <p className="text-dark/70">
-              Thank you for sharing 💛
-            </p>
-          </motion.div>
-        ) : (
-          <motion.div className="space-y-6">
-
-            {/* 🔐 PASSWORD */}
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter access code"
-              className="w-full p-3 border rounded-xl"
-            />
-
-            {/* Drop Zone */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`rounded-2xl border-2 border-dashed cursor-pointer p-10 text-center ${
-                isDragging
-                  ? 'border-gold bg-gold/5'
-                  : 'border-warm-beige bg-champagne/20 hover:bg-champagne/40'
-              }`}
-            >
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                className="hidden"
-                multiple
-                accept="image/*"
-              />
-
-              <Camera className="mx-auto mb-4 text-gold" size={28} />
-
-              <p className="text-dark font-medium">Tap to select photos</p>
-              <p className="text-dark/50 text-sm">or drag and drop</p>
-            </div>
-
-            {/* Files */}
-            {files.length > 0 && (
-              <div className="grid grid-cols-2 gap-3">
-                {files.map((file, i) => (
-                  <div key={i} className="relative p-2 border rounded-lg text-sm">
-                    {file.name}
-                    <button
-                      onClick={() => removeFile(i)}
-                      className="absolute top-1 right-1"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Name */}
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
-              className="w-full p-3 border rounded-xl"
-            />
-
-            {/* Upload */}
-            <button
-              onClick={handleUpload}
-              disabled={
-                files.length === 0 ||
-                uploadState === "uploading" ||
-                !password
-              }
-              className={`w-full py-3 rounded-xl text-white ${
-                files.length === 0
-                  ? "bg-warm-beige cursor-not-allowed"
-                  : "bg-dark hover:bg-dark/90"
-              }`}
-            >
-              {uploadState === "uploading"
-                ? `Uploading... ${progress}%`
-                : "Upload"}
-            </button>
-
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

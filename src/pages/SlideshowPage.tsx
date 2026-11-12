@@ -3,10 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Pause, Play } from 'lucide-react';
 
-// ✅ Firebase
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { db } from "../lib/firebase";
-
 import { MediaItem } from '../types';
 
 export function SlideshowPage() {
@@ -17,27 +13,25 @@ export function SlideshowPage() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [showControls, setShowControls] = useState(true);
 
-  // 🔥 FETCH FROM FIREBASE (REAL-TIME)
   useEffect(() => {
-    const q = query(
-      collection(db, "gallery"),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        url: doc.data().url,
-        uploaderName: doc.data().uploaderName,
-        createdAt: doc.data().createdAt,
-        type: "photo",
-      }));
-
-      setItems(data as MediaItem[]);
-      setCurrentIndex(0);
-    });
-
-    return () => unsubscribe();
+    const controller = new AbortController();
+    fetch(`${import.meta.env.VITE_GALLERY_API_URL || ''}/api/gallery`, {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Gallery service is not configured yet.');
+        return response.json() as Promise<MediaItem[]>;
+      })
+      .then((data) => {
+        setItems(data);
+        setCurrentIndex(0);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        console.error('Could not load the Cloudflare gallery:', error);
+        setItems([]);
+      });
+    return () => controller.abort();
   }, []);
 
   // 🔥 AUTO-HIDE CONTROLS
@@ -143,11 +137,11 @@ export function SlideshowPage() {
           }}
           className="absolute inset-0 flex items-center justify-center"
         >
-          <img
-            src={currentItem.url}
-            alt="Slideshow"
-            className="w-full h-full object-cover"
-          />
+          {currentItem.type === 'video' ? (
+            <video src={currentItem.url} className="w-full h-full object-contain" autoPlay muted loop playsInline />
+          ) : (
+            <img src={currentItem.url} alt="Wedding gallery upload" className="w-full h-full object-cover" />
+          )}
         </motion.div>
       </AnimatePresence>
 

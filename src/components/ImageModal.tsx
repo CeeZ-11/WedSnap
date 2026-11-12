@@ -140,11 +140,21 @@ export function ImageModal({
           className="relative max-w-5xl max-h-[85vh] w-full px-4 md:px-16 flex justify-center items-center"
           onClick={(e) => e.stopPropagation()}
         >
-          <img
-            src={item.url}
-            alt={`Uploaded by ${item.uploaderName}`}
-            className="max-w-full max-h-[85vh] object-contain rounded-md shadow-2xl"
-          />
+          {item.type === 'video' ? (
+            <video
+              src={item.url}
+              controls
+              autoPlay
+              playsInline
+              className="max-w-full max-h-[85vh] rounded-md shadow-2xl"
+            />
+          ) : (
+            <img
+              src={item.url}
+              alt={`Uploaded by ${item.uploaderName}`}
+              className="max-w-full max-h-[85vh] object-contain rounded-md shadow-2xl"
+            />
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>

@@ -4,39 +4,26 @@ import { GalleryGrid } from '../components/GalleryGrid';
 import { ImageModal } from '../components/ImageModal';
 import { MediaItem } from '../types';
 
-// Firebase
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { db } from "../lib/firebase";
-
 export function GalleryPage() {
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
   const [items, setItems] = useState<MediaItem[]>([]);
 
-  // 🔥 REAL-TIME LISTENER
   useEffect(() => {
-    const q = query(
-      collection(db, "gallery"),
-      orderBy("createdAt", "desc")
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data: MediaItem[] = snapshot.docs.map((doc) => {
-        const d = doc.data();
-
-        return {
-          id: doc.id,
-          url: d.url,
-          thumbnailUrl: d.url, // ✅ important for grid
-          uploaderName: d.uploaderName || "Guest",
-          type: "photo",
-          timestamp: new Date(d.createdAt || Date.now()), // ✅ fix for modal
-        };
+    const controller = new AbortController();
+    fetch(`${import.meta.env.VITE_GALLERY_API_URL || ''}/api/gallery`, {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Gallery service is not configured yet.');
+        return response.json() as Promise<MediaItem[]>;
+      })
+      .then(setItems)
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        console.error('Could not load the Cloudflare gallery:', error);
+        setItems([]);
       });
-
-      setItems(data);
-    });
-
-    return () => unsubscribe();
+    return () => controller.abort();
   }, []);
 
   // ✅ Next

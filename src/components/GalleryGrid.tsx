@@ -74,12 +74,16 @@ export function GalleryGrid({ items, onItemClick }: GalleryGridProps) {
             onClick={() => onItemClick(item)}
           >
             {/* IMAGE */}
-            <img
-              src={imageUrl}
-              alt={`Uploaded by ${item.uploaderName}`}
-              className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105"
-              loading="lazy"
-            />
+            {item.type === 'video' ? (
+              <video src={imageUrl} className="w-full h-auto object-cover" muted playsInline preload="metadata" />
+            ) : (
+              <img
+                src={imageUrl}
+                alt={`Uploaded by ${item.uploaderName}`}
+                className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105"
+                loading="lazy"
+              />
+            )}
 
             {/* VIDEO ICON (optional fallback) */}
             {item.type === 'video' && (
