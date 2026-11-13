@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Image as ImageIcon } from 'lucide-react';
+import { Play, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { MediaItem } from '../types';
 
 interface GalleryGridProps {
   items: MediaItem[]; // ✅ NOW FROM FIREBASE
   onItemClick: (item: MediaItem) => void;
+  onDeleteClick: (item: MediaItem) => void;
 }
 
-export function GalleryGrid({ items, onItemClick }: GalleryGridProps) {
+export function GalleryGrid({ items, onItemClick, onDeleteClick }: GalleryGridProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   // 🔥 Simulate loading only when items first arrive
@@ -73,6 +74,19 @@ export function GalleryGrid({ items, onItemClick }: GalleryGridProps) {
             className="relative group cursor-pointer break-inside-avoid overflow-hidden rounded-2xl shadow-sm hover:shadow-md transition-shadow bg-champagne/20"
             onClick={() => onItemClick(item)}
           >
+            <button
+              type="button"
+              aria-label={`Delete photo or video uploaded by ${item.uploaderName}`}
+              title="Delete this item (admin code required)"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDeleteClick(item);
+              }}
+              className="absolute left-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white shadow transition hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <Trash2 aria-hidden="true" size={17} />
+            </button>
+
             {/* IMAGE */}
             {item.type === 'video' ? (
               <video src={imageUrl} className="w-full h-auto object-cover" muted playsInline preload="metadata" />

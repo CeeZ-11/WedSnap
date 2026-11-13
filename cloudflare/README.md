@@ -10,6 +10,8 @@ Uploads are open. The frontend form is visible, while the Worker enforces the gu
 
 The 90 MiB per-file limit keeps each upload below Cloudflare's 100 MB request-body limit on Free and Pro plans. For larger videos, use direct-to-R2 multipart uploads instead of raising this single-request limit.
 
+Gallery deletion is protected by a separate four-digit admin code. Configure it as a Cloudflare Worker secret named `ADMIN_DELETE_CODE` (never add the code to frontend files or Git). Wrong codes are limited to five attempts per IP per 15 minutes. A four-digit code is relatively easy to guess, so keep the gallery URL private and change the code if it is exposed.
+
 ## Deployment setup
 
 1. Create the R2 bucket and D1 database, then fill their names and IDs into `wrangler.toml`.

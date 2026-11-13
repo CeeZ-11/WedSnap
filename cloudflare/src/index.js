@@ -11,8 +11,8 @@ function corsHeaders(request, env) {
   if (!origin || !allowed || allowed.startsWith('REPLACE-') || !allowedOrigins.has(origin)) return {};
   return {
     'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
-    'access-control-allow-headers': 'content-type, x-guest-name, x-invite-code, x-file-name',
+    'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
+    'access-control-allow-headers': 'content-type, x-guest-name, x-invite-code, x-file-name, x-admin-code',
     'vary': 'Origin',
   };
 }
@@ -20,6 +20,13 @@ function corsHeaders(request, env) {
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function constantTimeEqual(left, right) {
+  if (left.length !== right.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < left.length; index += 1) mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return mismatch === 0;
 }
 
 export default {
@@ -44,6 +51,58 @@ export default {
         type: row.content_type.startsWith('video/') ? 'video' : 'photo',
         createdAt: row.created_at,
       })), 200, cors);
+    }
+
+    const deleteMatch = url.pathname.match(/^\/api\/gallery\/([^/]+)$/);
+    if (deleteMatch && request.method === 'DELETE') {
+      const adminCode = request.headers.get('x-admin-code') || '';
+      const configuredCode = env.ADMIN_DELETE_CODE || '';
+      if (!/^\d{4}$/.test(configuredCode)) {
+        return json({ error: 'Admin deletion is not configured.' }, 503, cors);
+      }
+
+      const sourceIp = request.headers.get('CF-Connecting-IP') || 'unknown-ip';
+      const attemptKey = await sha256Hex(`admin-delete\u0000${sourceIp}`);
+      const now = Date.now();
+      const lockoutWindowMs = 15 * 60 * 1000;
+      const maxFailedAttempts = 5;
+      const attempts = await env.DB.prepare(
+        'SELECT window_started_at, failed_attempts FROM upload_auth_attempts WHERE attempt_key = ?'
+      ).bind(attemptKey).first();
+      if (attempts && now - attempts.window_started_at < lockoutWindowMs && attempts.failed_attempts >= maxFailedAttempts) {
+        return json({ error: 'Too many incorrect admin codes. Please wait 15 minutes and try again.' }, 429, cors);
+      }
+
+      if (!constantTimeEqual(adminCode, configuredCode)) {
+        await env.DB.prepare(
+          `INSERT INTO upload_auth_attempts (attempt_key, window_started_at, failed_attempts)
+           VALUES (?, ?, 1)
+           ON CONFLICT(attempt_key) DO UPDATE SET
+             window_started_at = CASE
+               WHEN upload_auth_attempts.window_started_at <= ? THEN excluded.window_started_at
+               ELSE upload_auth_attempts.window_started_at
+             END,
+             failed_attempts = CASE
+               WHEN upload_auth_attempts.window_started_at <= ? THEN 1
+               ELSE upload_auth_attempts.failed_attempts + 1
+             END`
+        ).bind(attemptKey, now, now - lockoutWindowMs, now - lockoutWindowMs).run();
+        return json({ error: 'Admin code is incorrect.' }, 403, cors);
+      }
+
+      const id = decodeURIComponent(deleteMatch[1]);
+      const media = await env.DB.prepare('SELECT object_key FROM media WHERE id = ?').bind(id).first();
+      if (!media) return json({ error: 'This gallery item no longer exists.' }, 404, cors);
+
+      try {
+        await env.MEDIA.delete(media.object_key);
+        await env.DB.prepare('DELETE FROM media WHERE id = ?').bind(id).run();
+        await env.DB.prepare('DELETE FROM upload_auth_attempts WHERE attempt_key = ?').bind(attemptKey).run();
+      } catch (error) {
+        console.error('Gallery deletion failed:', error);
+        return json({ error: 'Unable to delete this file. Please try again.' }, 500, cors);
+      }
+      return json({ status: 'deleted' }, 200, cors);
     }
 
     if (url.pathname.startsWith('/media/') && request.method === 'GET') {
