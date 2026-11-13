@@ -122,8 +122,8 @@ export function UploadForm() {
       ) : uploadsEnabled ? (
         <div className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="upload-guest-name" className="block font-sans text-xs font-semibold uppercase tracking-[0.18em] text-deep-olive">Full Name</label>
-            <p className="font-sans text-sm italic text-deep-olive/70">Type your name and select it from the suggestions.</p>
+            <label htmlFor="upload-guest-name" className="block text-center font-sans text-xs font-semibold uppercase tracking-[0.18em] text-deep-olive">Full Name</label>
+            <p className="text-center font-sans text-sm italic text-deep-olive/70">Type your name and select it from the suggestions.</p>
             <div className="relative">
               <input
                 id="upload-guest-name"
@@ -160,7 +160,7 @@ export function UploadForm() {
                   }
                 }}
                 placeholder="Start typing your name"
-                className="w-full border-x-0 border-b border-t-0 border-warm-beige bg-transparent px-0 py-3 text-left font-serif text-xl text-deep-olive placeholder:text-deep-olive/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-deep-olive focus-visible:ring-offset-2 transition-colors"
+                className="w-full border-x-0 border-b border-t-0 border-warm-beige bg-transparent px-0 py-3 text-center font-serif text-xl text-deep-olive placeholder:text-center placeholder:text-deep-olive/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-deep-olive focus-visible:ring-offset-2 transition-colors"
               />
               {nameSuggestionsOpen && nameQuery.length >= 2 && nameSuggestions.length > 0 && (
                 <ul id="upload-guest-name-suggestions" role="listbox" className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto border border-warm-beige bg-white py-1 shadow-md">
@@ -188,7 +188,7 @@ export function UploadForm() {
             </div>
           </div>
           <div className="space-y-2">
-            <label htmlFor="upload-invite-code" className="block font-sans text-xs font-semibold uppercase tracking-[0.18em] text-deep-olive">Invite Code</label>
+            <label htmlFor="upload-invite-code" className="block text-center font-sans text-xs font-semibold uppercase tracking-[0.18em] text-deep-olive">Gallery Upload Code</label>
             <input
               id="upload-invite-code"
               type="text"
@@ -201,9 +201,9 @@ export function UploadForm() {
               value={inviteCode}
               onChange={(event) => setInviteCode(event.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 4))}
               placeholder="Four letters or numbers"
-              className="w-full border-x-0 border-b border-t-0 border-warm-beige bg-transparent px-0 py-3 font-serif text-xl uppercase tracking-[0.22em] text-deep-olive placeholder:normal-case placeholder:tracking-normal placeholder:text-deep-olive/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-deep-olive focus-visible:ring-offset-2 transition-colors"
+              className="w-full border-x-0 border-b border-t-0 border-warm-beige bg-transparent px-0 py-3 text-center font-serif text-xl uppercase tracking-[0.22em] text-deep-olive placeholder:normal-case placeholder:tracking-normal placeholder:text-center placeholder:text-deep-olive/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-deep-olive focus-visible:ring-offset-2 transition-colors"
             />
-            <p className="font-sans text-xs text-deep-olive/70">Enter the four-character code exactly as provided.</p>
+            <p className="text-center font-sans text-xs text-deep-olive/70">Enter the four-character code provided for gallery uploads.</p>
           </div>
           <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-2xl border-2 border-dashed border-warm-beige bg-champagne/20 p-10 text-center hover:bg-champagne/40">
             <Camera className="mx-auto mb-4 text-gold" size={28} />
