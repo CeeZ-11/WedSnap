@@ -7,6 +7,9 @@ compatibility_date = "2026-11-12"
 UPLOADS_ENABLED = "true"
 FRONTEND_ORIGIN = "https://wed-snap-nine.vercel.app"
 
+[secrets]
+required = ["ADMIN_DELETE_CODE"]
+
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "wedsnap-gallery-media"
