@@ -198,7 +198,7 @@ export default {
           'INSERT INTO media (id, object_key, uploader_name, content_type, created_at) VALUES (?, ?, ?, ?, ?)'
         ).bind(id, key, guest.name, contentType, Date.now()).run();
       } catch (error) {
-        await env.MEDIA.delete(key).catch(() => {});
+        await env.MEDIA.delete(key).catch(() => { /* best-effort cleanup; the upload already failed */ });
         console.error('Gallery upload failed:', error);
         return json({ error: 'Unable to save this file. Please try again.' }, 500, cors);
       }

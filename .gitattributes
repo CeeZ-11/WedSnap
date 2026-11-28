@@ -1,0 +1,6 @@
+# Keep LF line endings on every OS (Windows checkouts used CRLF and broke exact-match tests and Prettier).
+# Windows scripts keep CRLF so cmd.exe and PowerShell read them correctly.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
